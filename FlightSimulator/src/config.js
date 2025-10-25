@@ -1,0 +1,1 @@
+export const BACKEND = import.meta.env.VITE_BACKEND_URL || window.__BACKEND_URL__ || 'http://127.0.0.1:8000'

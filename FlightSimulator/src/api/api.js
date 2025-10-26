@@ -40,7 +40,7 @@ return handleRes(res)
 
 
 export async function bookFlight(payload) {
-const res = await fetch(`${BACKEND}/book`, {
+const res = await fetch(`${BACKEND}/bookings`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
 body: JSON.stringify(payload)

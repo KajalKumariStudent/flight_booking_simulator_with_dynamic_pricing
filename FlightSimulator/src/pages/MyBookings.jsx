@@ -33,7 +33,7 @@ export default function MyBookings() {
 
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-4">My Bookings</h2>
+      <h2 className="text-2xl text-blue-600 font-semibold mb-4">My Bookings</h2>
       <div className="space-y-3">
         {bookings.length === 0 && <div className="p-4 bg-muted rounded">No bookings found.</div>}
         {bookings.map((b, index) => (

@@ -41,14 +41,20 @@ CREATE TABLE IF NOT EXISTS flights (
     FOREIGN KEY (source_airport) REFERENCES airports(airport_id),
     FOREIGN KEY (destination_airport) REFERENCES airports(airport_id)
 );
+ALTER TABLE flights
+ADD COLUMN current_price FLOAT DEFAULT 0;
+
 
 -- Passengers
 CREATE TABLE IF NOT EXISTS passengers (
     passenger_id INT AUTO_INCREMENT PRIMARY KEY,
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
-    phone VARCHAR(15)
+    phone VARCHAR(15),
+    hashed_password VARCHAR(255) NOT NULL
 );
+
+
 
 -- Bookings
 CREATE TABLE IF NOT EXISTS bookings (
@@ -97,11 +103,11 @@ VALUES
 (3, 'SG303', 3, 4, '2025-10-14 07:00:00', '2025-10-14 09:30:00', 4000, 160, 150);
 
 -- Passengers
-INSERT INTO passengers (full_name, email, phone) VALUES
-('Rohit Sharma', 'rohit@example.com', '9999911111'),
-('Priya Singh', 'priya@example.com', '8888822222'),
-('Aman Verma', 'aman@example.com', '7777733333'),
-('Kajal Kumari', 'kajal@example.com', '6666644444');
+INSERT INTO passengers (full_name, email, phone, hashed_password) VALUES
+('Rohits Sharma', 'rohits@example.com', '9999901111','hashed_password_1'),
+('Priyas Singh', 'priyas@example.com', '888892022','hashed_password_2'),
+('Amans Verma', 'amana@example.com', '7777733338','hashed_password_3'),
+('Kajal Kumaari', 'kajaal@example.com', '6666644544','hashed_password_4');
 
 -- Bookings (example)
 INSERT INTO bookings (flight_id, passenger_id, seat_no, fare_paid)

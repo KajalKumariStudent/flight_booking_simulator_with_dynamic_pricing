@@ -36,55 +36,109 @@ finally { setLoading(false) }
 }
 
   return (
-    <div className="grid grid-cols-3 gap-6">
-<section className="col-span-2 bg-white p-6 rounded-lg shadow">
-<h3 className="text-lg font-semibold mb-4">Payment — {booking?.id || bookingId}</h3>
+    <div className="min-h-screen bg-gray-100 p-6 flex flex-col lg:flex-row gap-6">
+      
+      {/* Payment Form */}
+      <section className="lg:flex-2 bg-white rounded-3xl shadow-lg p-8 space-y-6">
+        <h3 className="text-2xl font-bold text-blue-600 mb-4">Payment — {booking?.id || bookingId}</h3>
 
+        {error && <div className="text-sm text-red-600">{error}</div>}
 
-{error && <div className="mb-4 text-sm text-red-600">{error}</div>}
+        <form onSubmit={pay} className="space-y-6">
 
+          {/* Payment Method */}
+          <div className="flex flex-col">
+            <label className="text-blue-600 font-medium mb-2">Payment Method</label>
+            <select
+              value={method}
+              onChange={e => setMethod(e.target.value)}
+              className="border border-gray-300 rounded-xl p-3 w-64 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+            >
+              <option value="card">Credit / Debit Card</option>
+              <option value="upi">UPI</option>
+              <option value="netbanking">NetBanking</option>
+            </select>
+          </div>
 
-<form onSubmit={pay} className="space-y-4">
-<div>
-<label className="text-sm text-slate-600 block mb-1">Payment Method</label>
-<select value={method} onChange={e => setMethod(e.target.value)} className="border rounded w-56 p-2">
-<option value="card">Credit / Debit Card</option>
-<option value="upi">UPI</option>
-<option value="netbanking">NetBanking</option>
-</select>
-</div>
+          {/* Card Details */}
+          {method === "card" && (
+            <div className="space-y-4">
+              {/* Card Logos */}
+              <div className="flex gap-3 mb-2">
+                <img src="/assets/visa.png" alt="Visa" className="h-8"/>
+                <img src="/assets/mastercard.png" alt="Mastercard" className="h-8"/>
+                <img src="/assets/amex.png" alt="Amex" className="h-8"/>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input
+                  placeholder="Card number"
+                  value={card.number}
+                  onChange={e => setCard({ ...card, number: e.target.value })}
+                  className="border border-gray-300 rounded-xl p-3 text-black focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  required
+                />
+                <input
+                  placeholder="Name on card"
+                  value={card.name}
+                  onChange={e => setCard({ ...card, name: e.target.value })}
+                  className="border border-gray-300 rounded-xl p-3 text-black focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  required
+                />
+                <input
+                  placeholder="MM/YY"
+                  value={card.exp}
+                  onChange={e => setCard({ ...card, exp: e.target.value })}
+                  className="border border-gray-300 rounded-xl p-3 text-black focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  required
+                />
+                <input
+                  placeholder="CVV"
+                  value={card.cvv}
+                  onChange={e => setCard({ ...card, cvv: e.target.value })}
+                  className="border border-gray-300 rounded-xl p-3 text-black focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  required
+                />
+              </div>
+            </div>
+          )}
 
-{method === "card" && (
-<div className="grid grid-cols-2 gap-3">
-<input placeholder="Card number" value={card.number} onChange={e=>setCard({...card, number:e.target.value})} className="border p-2 rounded" required />
-<input placeholder="Name on card" value={card.name} onChange={e=>setCard({...card, name:e.target.value})} className="border p-2 rounded" required />
-<input placeholder="MM/YY" value={card.exp} onChange={e=>setCard({...card, exp:e.target.value})} className="border p-2 rounded" required />
-<input placeholder="CVV" value={card.cvv} onChange={e=>setCard({...card, cvv:e.target.value})} className="border p-2 rounded" required />
-</div>
-)}
+          {/* UPI Payment */}
+          {method === "upi" && (
+            <div className="flex flex-col items-start space-y-4">
+              <label className="text-blue-600 font-medium">Scan QR to Pay</label>
+              {/* Placeholder QR */}
+              <div className="w-40 h-40 bg-gray-200 flex items-center justify-center rounded-xl shadow">
+                <span className="text-gray-500">QR Code</span>
+              </div>
+              <input
+                placeholder="UPI ID (optional)"
+                className="border border-gray-300 rounded-xl p-3 w-64 text-black focus:ring-2 focus:ring-blue-600 focus:outline-none"
+              />
+            </div>
+          )}
 
+          {/* Confirm Button */}
+          <div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-64 bg-blue-600 text-white font-semibold rounded-xl py-3 shadow hover:bg-blue-700 transition transform hover:-translate-y-0.5"
+            >
+              {loading ? "Processing..." : "Confirm & Pay"}
+            </button>
+          </div>
+        </form>
+      </section>
 
-{method === "upi" && (
-<div>
-<input placeholder="UPI ID" className="border p-2 rounded w-64" />
-</div>
-)}
+      {/* Booking Summary */}
+      <aside className="lg:flex-1 bg-white rounded-3xl shadow-lg p-6 h-fit">
+        <div className="font-bold text-blue-600 mb-3 text-lg">Booking Summary</div>
+        <div className="text-black text-sm mb-2">{booking?.flight?.airline} • {booking?.flight?.flightNo}</div>
+        <div className="mb-4 text-black">Seats: <span className="font-medium">{booking?.seats?.join(", ")}</span></div>
+        <div className="text-2xl font-bold text-blue-600">₹ {booking?.total || 1000}</div>
+      </aside>
 
-
-<div>
-<button className="bg-primary text-white px-4 py-2 rounded" disabled={loading}>{loading ? 'Processing...' : 'Confirm & Pay'}</button>
-</div>
-</form>
-</section>
-
-
-<aside className="bg-muted p-6 rounded-lg">
-<div className="font-semibold mb-3">Booking Summary</div>
-<div className="text-sm text-slate-600 mb-2">{booking?.flight?.airline} • {booking?.flight?.flightNo}</div>
-<div className="mb-4">Seats: <span className="font-medium">{booking?.seats?.join(", ")}</span></div>
-<div className="text-xl font-bold">₹ {booking?.total || 1000}</div>
-</aside>
-</div>
+    </div>
   );
 }

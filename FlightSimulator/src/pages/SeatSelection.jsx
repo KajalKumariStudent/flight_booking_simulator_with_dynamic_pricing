@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { getSeats } from "../api/api";
+import { getSeats, bookFlight } from "../api/api";
 
 
 function Seat({ seatId, status, selected, onClick }) {
@@ -14,7 +14,7 @@ return (
 );
 }
 
-export default function SeatSelection() {
+export default function SeatSelection({passenger}) {
   const { flightId } = useParams();
   const location = useLocation();
   const nav = useNavigate();
@@ -63,19 +63,34 @@ export default function SeatSelection() {
   }
 
 
-  function continueToPayment() {
-    const booking = {
-      id: `BK-${Date.now()}`,
-      flight,
-      seats: selected,
-      total: selected.length * (flight ? Math.round(flight.baseFare * 0.25) : 1000)
+  async function continueToPayment() {
+    if (!passenger) {
+    alert("You must login or signup before booking a seat.");
+    nav("/login");
+    return;
+  }
+  if (!selected.length) return;
+
+  try {
+    const payload = {
+      flight_id: flight.flight_id,
+      passenger_id: passenger.passenger_id,
+      seat_no: selected[0]  // pick first seat for now
     };
-    nav(`/payment/${booking.id}`, { state: { booking } });
+
+    // Call backend to create booking
+    const booking = await bookFlight(payload);
+
+    // Navigate to MyBookings or a "Booking Details" page using the PNR
+    nav(`/bookings/${booking.pnr}`, { state: { booking } });
+  } catch (err) {
+    alert("Booking failed: " + err.message);
+  }
   }
   return (
 <div className="grid grid-cols-3 gap-6">
-  <section className="col-span-2 bg-white p-6 rounded-lg shadow">
-  <h3 className="text-lg font-semibold mb-4">Select seats — Flight {flight?.flightNo || flightId}</h3>
+  <section className="col-span-2 bg-gray-100 p-6 rounded-lg shadow">
+  <h3 className="text-2xl text-blue-500 font-semibold mb-4">Select seats — Flight {flight?.flightNo || flightId}</h3>
 
 
   {loading && <div className="mb-4 text-sm">Loading seat availability...</div>}
@@ -99,10 +114,10 @@ export default function SeatSelection() {
 
 
 <aside className="bg-muted p-6 rounded-lg">
-  <div className="font-semibold mb-2">Fare Summary</div>
+  <div className="font-semibold mb-2 text-2xl text-blue-500">Fare Summary</div>
   <div className="text-sm text-slate-600 mb-2">Base estimate (per seat)</div>
   <div className="text-xl font-bold mb-4">₹ {flight ? Math.round(flight.baseFare * 0.25) : 1200}</div>
-  <button onClick={continueToPayment} className="w-full bg-primary text-white py-2 rounded" disabled={selected.length===0}>
+  <button onClick={continueToPayment} className="w-full bg-blue-600 text-white py-2 rounded" disabled={selected.length===0}>
   Continue to Payment
   </button>
   </aside>

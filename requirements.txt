@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-sqlalchemy>=1.4
-pymysql
-pydantic
-python-dotenv
-email-validator

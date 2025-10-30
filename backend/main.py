@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from utils import hash_password, verify_password
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 
 
 models.Base.metadata.create_all(bind=engine)
@@ -72,7 +73,112 @@ def root():
 # -------------------------
 @app.get("/flights", response_model=list[schemas.FlightOut])
 def list_flights(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-    return db.query(models.Flight).offset(skip).limit(limit).all()
+    try:
+        src = aliased(models.Airport)
+        dst = aliased(models.Airport)
+
+        flights = (
+            db.query(
+                models.Flight.flight_id,
+                models.Flight.flight_number,
+                models.Flight.departure_time,
+                models.Flight.arrival_time,
+                models.Flight.available_seats,
+                models.Flight.total_seats,
+                models.Flight.base_fare,
+                models.Airline.airline_name,
+                src.city.label("source_airport"),
+                dst.city.label("destination_airport"),
+            )
+            .join(models.Airline, models.Flight.airline_id == models.Airline.airline_id)
+            .join(src, models.Flight.source_airport == src.airport_id)
+            .join(dst, models.Flight.destination_airport == dst.airport_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+        result = []
+        for f in flights:
+            dynamic_price = pricing.calculate_dynamic_price(
+                base_fare=f.base_fare,
+                available_seats=f.available_seats,
+                total_seats=f.total_seats,
+                departure=f.departure_time,
+            )
+            result.append({
+                "flight_id": f.flight_id,
+                "flight_number": f.flight_number,
+                "departure_time": f.departure_time,
+                "arrival_time": f.arrival_time,
+                "available_seats": f.available_seats,
+                "total_seats": f.total_seats,
+                "base_fare": float(f.base_fare),
+                "dynamic_price": dynamic_price,
+                "airline_name": f.airline_name,
+                "source_airport": f.source_airport,
+                "destination_airport": f.destination_airport,
+            })
+
+        return result
+
+    except Exception as e:
+        print("❌ Flights endpoint error:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/flights/{flight_id}", response_model=schemas.FlightOut)
+def get_flight_by_id(flight_id: int, db: Session = Depends(get_db)):
+    """
+    Return full flight details by flight_id, including airline and airport info.
+    """
+    src = aliased(models.Airport)
+    dst = aliased(models.Airport)
+
+    f = (
+        db.query(
+            models.Flight.flight_id,
+            models.Flight.flight_number,
+            models.Flight.departure_time,
+            models.Flight.arrival_time,
+            models.Flight.available_seats,
+            models.Flight.total_seats,
+            models.Flight.base_fare,
+            models.Airline.airline_name,
+            src.city.label("source_airport"),
+            dst.city.label("destination_airport"),
+        )
+        .join(models.Airline, models.Flight.airline_id == models.Airline.airline_id)
+        .join(src, models.Flight.source_airport == src.airport_id)
+        .join(dst, models.Flight.destination_airport == dst.airport_id)
+        .filter(models.Flight.flight_id == flight_id)
+        .first()
+    )
+
+    if not f:
+        raise HTTPException(status_code=404, detail="Flight not found")
+
+    # ✅ Optionally compute dynamic fare for the response
+    dynamic_price = pricing.calculate_dynamic_price(
+        base_fare=f.base_fare,
+        available_seats=f.available_seats,
+        total_seats=f.total_seats,
+        departure=f.departure_time,
+    )
+
+    return {
+        "flight_id": f.flight_id,
+        "flight_number": f.flight_number,
+        "departure_time": f.departure_time,
+        "arrival_time": f.arrival_time,
+        "available_seats": f.available_seats,
+        "total_seats": f.total_seats,
+        "base_fare": float(f.base_fare),
+        "dynamic_price": dynamic_price,
+        "airline_name": f.airline_name,
+        "source_airport": f.source_airport,
+        "destination_airport": f.destination_airport,
+    }
+
 
 @app.get("/search", response_model=list[schemas.FlightOut])
 def search_flights(
@@ -86,81 +192,74 @@ def search_flights(
     db: Session = Depends(get_db)
 ):
     try:
-        q = db.query(
-            models.Flight.flight_id,
-            models.Flight.flight_number,
-            models.Flight.source_airport,
-            models.Flight.destination_airport,
-            models.Flight.departure_time,
-            models.Flight.arrival_time,
-            models.Flight.available_seats,
-            models.Flight.total_seats,
-            models.Flight.base_fare
+        src = aliased(models.Airport)
+        dst = aliased(models.Airport)
+
+        q = (
+            db.query(
+                models.Flight.flight_id,
+                models.Flight.flight_number,
+                models.Flight.departure_time,
+                models.Flight.arrival_time,
+                models.Flight.available_seats,
+                models.Flight.total_seats,
+                models.Flight.base_fare,
+                models.Airline.airline_name,
+                src.city.label("source_airport"),
+                dst.city.label("destination_airport"),
+            )
+            .join(models.Airline, models.Flight.airline_id == models.Airline.airline_id)
+            .join(src, models.Flight.source_airport == src.airport_id)
+            .join(dst, models.Flight.destination_airport == dst.airport_id)
         )
 
-        airport_code_to_city = {
-            "DEL": "Delhi",
-            "BOM": "Mumbai",
-            "BLR": "Bangalore",
-            "CCU": "Kolkata"
-        }
-
+        # Handle filters
         if origin:
-            origin_city = airport_code_to_city.get(origin.upper(), origin)
-            src = aliased(models.Airport)
-            q = q.join(src, models.Flight.source_airport == src.airport_id)
-            q = q.filter(func.lower(src.city) == origin_city.lower())
-
+            q = q.filter(func.lower(src.city) == origin.lower())
         if destination:
-            destination_city = airport_code_to_city.get(destination.upper(), destination)
-            dst = aliased(models.Airport)
-            q = q.join(dst, models.Flight.destination_airport == dst.airport_id)
-            q = q.filter(func.lower(dst.city) == destination_city.lower())
+            q = q.filter(func.lower(dst.city) == destination.lower())
 
         if travel_date:
             td = datetime.strptime(travel_date, "%Y-%m-%d").date()
-            q = q.filter(models.Flight.travel_date == td)
+            q = q.filter(func.date(models.Flight.departure_time) == td)
 
         # Sorting
         if sort_by == "price":
-            q = q.order_by(models.Flight.base_fare.asc() if order=="asc" else models.Flight.base_fare.desc())
+            q = q.order_by(models.Flight.base_fare.asc() if order == "asc" else models.Flight.base_fare.desc())
         elif sort_by == "duration":
             duration_expr = func.extract("epoch", models.Flight.arrival_time - models.Flight.departure_time)
-            q = q.order_by(duration_expr.asc() if order=="asc" else duration_expr.desc())
+            q = q.order_by(duration_expr.asc() if order == "asc" else duration_expr.desc())
 
         flights = q.offset(skip).limit(limit).all()
 
-        # Prepare result with dynamic price
         result = []
         for f in flights:
             dynamic_price = pricing.calculate_dynamic_price(
                 base_fare=f.base_fare,
                 available_seats=f.available_seats,
                 total_seats=f.total_seats,
-                departure=f.departure_time
+                departure=f.departure_time,
             )
             result.append({
                 "flight_id": f.flight_id,
                 "flight_number": f.flight_number,
-                "airline_id": getattr(f, "airline_id", None),
-                "source_airport": f.source_airport,
-                "destination_airport": f.destination_airport,
                 "departure_time": f.departure_time,
                 "arrival_time": f.arrival_time,
                 "available_seats": f.available_seats,
                 "total_seats": f.total_seats,
                 "base_fare": float(f.base_fare),
-                "flight_type": getattr(f, "flight_type", None),
-                "travel_date": getattr(f, "travel_date", None),
-                "dynamic_price": dynamic_price
+                "dynamic_price": dynamic_price,
+                "airline_name": f.airline_name,
+                "source_airport": f.source_airport,
+                "destination_airport": f.destination_airport,
             })
 
         return result
 
     except Exception as e:
-        print("Search endpoint error:", e)
+        print("❌ Search endpoint error:", e)
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 # -------------------------
 # Seat Availability Endpoint
 # -------------------------
@@ -204,6 +303,18 @@ def get_price(flight_id: int, db: Session = Depends(get_db)):
         "base_fare": float(f.base_fare),
         "available_seats": f.available_seats
     }
+# -------------------------
+# Airport Endpoints
+# -------------------------
+@app.get("/airports")
+def list_airports(db: Session = Depends(get_db)):
+    airports = (
+        db.query(models.Airport.airport_id, models.Airport.city, models.Airport.country)
+        .order_by(models.Airport.city.asc())
+        .all()
+    )
+    return [{"airport_id": a.airport_id, "city": a.city, "country": a.country} for a in airports]
+
 
 # -------------------------
 # Passenger Endpoints
@@ -251,9 +362,24 @@ def signup_passenger(payload: schemas.PassengerCreate, db: Session = Depends(get
 @app.post("/passengers/login")
 def login_passenger(payload: schemas.PassengerLogin, db: Session = Depends(get_db)):
     passenger = db.query(models.Passenger).filter(models.Passenger.email == payload.email).first()
-    if not passenger or not verify_password(payload.password, passenger.hashed_password):
+    
+    if not passenger:
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    return {"passenger_id": passenger.passenger_id, "full_name": passenger.full_name, "email": passenger.email}
+    
+    try:
+        valid = utils.verify_password(payload.password, passenger.hashed_password)
+    except Exception:
+        valid = False
+    
+    if not valid:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    return {
+        "passenger_id": passenger.passenger_id,
+        "full_name": passenger.full_name,
+        "email": passenger.email
+    }
+
 
 # -------------------------
 # Booking Endpoints
@@ -305,9 +431,49 @@ def create_booking(payload: schemas.BookingCreate, db: Session = Depends(get_db)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Booking failed: {exc}")
 
-@app.get("/bookings", response_model=list[schemas.BookingOut])
-def list_bookings(db: Session = Depends(get_db)):
-    return db.query(models.Booking).all()
+@app.get("/bookings")
+def list_bookings(
+    passenger_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
+    src = aliased(models.Airport)
+    dst = aliased(models.Airport)
+
+    q = (
+        db.query(
+            models.Booking,
+            models.Flight,
+            models.Airline.airline_name,
+            src.city.label("source_city"),
+            dst.city.label("destination_city"),
+        )
+        .join(models.Flight, models.Booking.flight_id == models.Flight.flight_id)
+        .join(models.Airline, models.Flight.airline_id == models.Airline.airline_id)
+        .join(src, models.Flight.source_airport == src.airport_id)
+        .join(dst, models.Flight.destination_airport == dst.airport_id)
+    )
+
+    # ✅ Filter by passenger_id if provided
+    if passenger_id is not None:
+        q = q.filter(models.Booking.passenger_id == passenger_id)
+
+    results = q.all()
+
+    return [
+        {
+            "pnr": b.pnr,
+            "status": b.status,
+            "fare_paid": float(b.fare_paid),
+            "seat_no": b.seat_no,
+            "booking_date": b.booking_date,
+            "flight_number": f.flight_number,
+            "airline_name": airline_name,
+            "source": source_city,
+            "destination": destination_city,
+            "passenger_id": b.passenger_id,
+        }
+        for b, f, airline_name, source_city, destination_city in results
+    ]
 
 @app.get("/bookings/{pnr}", response_model=schemas.BookingOut)
 def get_booking_by_pnr(pnr: str, db: Session = Depends(get_db)):

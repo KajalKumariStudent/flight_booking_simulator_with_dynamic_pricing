@@ -40,9 +40,19 @@ class Flight(Base):
     travel_date = Column(Date)
     current_price = Column(Float, default=0)
 
+    # ✅ Relationships
     airline = relationship("Airline", back_populates="flights")
+
+    source_airport_rel = relationship(
+        "Airport", foreign_keys=[source_airport], lazy="joined", overlaps="flights"
+    )
+    destination_airport_rel = relationship(
+        "Airport", foreign_keys=[destination_airport], lazy="joined", overlaps="flights"
+    )
+
     bookings = relationship("Booking", back_populates="flight")
     fare_history = relationship("FareHistory", back_populates="flight")
+
 
 class Passenger(Base):
     __tablename__ = "passengers"

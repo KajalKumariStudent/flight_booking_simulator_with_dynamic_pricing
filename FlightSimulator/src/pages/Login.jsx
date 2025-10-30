@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom"; // ✅ for redirection
 import { BACKEND } from "../config.js";
 
 export default function Login({ onLogin }) {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+  const navigate = useNavigate(); // ✅ useNavigate hook
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -15,22 +18,34 @@ export default function Login({ onLogin }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Login failed");
+
+      // ✅ Save passenger info in localStorage for persistence
+      localStorage.setItem("passenger_id", data.passenger_id);
+      localStorage.setItem("full_name", data.full_name);
+      localStorage.setItem("email", data.email);
+
+      // ✅ Update state in App (triggers Header update)
       onLogin(data);
-    } 
-    catch (err) {
+
+      // ✅ Redirect to home page after login
+      navigate("/");
+    } catch (err) {
       setError(err.message);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white p-6">
-      <form 
-        onSubmit={handleSubmit} 
+      <form
+        onSubmit={handleSubmit}
         className="bg-white shadow-lg rounded-2xl p-8 w-full max-w-md flex flex-col gap-5"
       >
-        <h2 className="text-2xl font-bold text-blue-600 mb-4 text-center">Login</h2>
+        <h2 className="text-2xl font-bold text-blue-600 mb-4 text-center">
+          Login
+        </h2>
 
         {/* Email Input */}
         <div className="flex flex-col">

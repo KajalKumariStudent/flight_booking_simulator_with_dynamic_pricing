@@ -40,18 +40,20 @@ return handleRes(res)
 
 
 export async function bookFlight(payload) {
-const res = await fetch(`${BACKEND}/bookings`, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(payload)
-})
-return handleRes(res)
+  console.log("✈️ Sending booking payload:", payload);
+  const res = await fetch(`${BACKEND}/bookings`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+  })
+  return handleRes(res)
 }
 
 
-export async function getBookings() {
-const res = await fetch(`${BACKEND}/bookings`)
-return handleRes(res)
+export async function getBookings(passenger_id) {
+  const res = await fetch(`${BACKEND}/bookings?passenger_id=${passenger_id}`);
+  if (!res.ok) throw new Error("Failed to load bookings");
+  return res.json();
 }
 
 

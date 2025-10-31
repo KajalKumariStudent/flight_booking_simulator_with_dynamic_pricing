@@ -45,7 +45,7 @@ flight_booking_simulator_with_dynamic_pricing/
 
 ---
 
-##🔍 Usage Flow
+## 🔍 Usage Flow
 
 On UI, search flights by origin, destination & date.
 
@@ -58,7 +58,7 @@ Complete payment (simulation) → get PNR & confirmation → downloadable e-tick
 My Bookings page: view all your bookings, cancel if needed.  
 
 
-##📄 e-Ticket PDF Details
+## 📄 e-Ticket PDF Details
 
 The downloaded receipt includes:
 
@@ -72,7 +72,7 @@ Fare breakdown: base fare, taxes/fees (calculated), discount (if any), total far
 
 Footer with project branding.
 
-##🧪 Dynamic Pricing Explanation
+## 🧪 Dynamic Pricing Explanation
 
 The engine adjusts fares using factors such as:
 
@@ -96,7 +96,7 @@ This gives a realistic “supply & demand” feel.
 - MySQL (or any supported SQL DB) instance  
 - (Optional) Docker & docker-compose for containerised run
 
-###Frontend Setup
+### Frontend Setup
 `
 cd frontend
 npm install                  # or `yarn install`

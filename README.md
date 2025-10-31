@@ -97,11 +97,12 @@ This gives a realistic “supply & demand” feel.
 - (Optional) Docker & docker-compose for containerised run
 
 ### Frontend Setup
-`
+```bash
 cd frontend
 npm install                  # or `yarn install`
 npm start                    # or `yarn start`
-# Opens UI at http://localhost:3000
+```
+## Opens UI at http://localhost:3000
 
 ### Backend Setup
 ```bash
@@ -110,4 +111,6 @@ python -m venv venv
 source venv/bin/activate     # (or `venv\Scripts\activate` on Windows)
 pip install -r requirements.txt
 # Edit `db_config.py` to point to your database credentials
-uvicorn main:app --reload    # runs server at http://127.0.0.1:8000
+uvicorn main:app --reload    
+```
+## runs server at http://127.0.0.1:8000

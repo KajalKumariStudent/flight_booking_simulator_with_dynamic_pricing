@@ -25,6 +25,8 @@ This project demonstrates database management, backend API integration, frontend
 
 ## 🏗️ Project Structure
 
+```
+
 flight_booking_simulator_with_dynamic_pricing/
 ├── backend/
 │ ├── main.py # FastAPI entry point
@@ -42,6 +44,8 @@ flight_booking_simulator_with_dynamic_pricing/
 │ └── tailwind.config.js
 ├── database/ # Optional folder for DB scripts / migrations
 └── LICENSE.txt
+
+```
 
 ---
 

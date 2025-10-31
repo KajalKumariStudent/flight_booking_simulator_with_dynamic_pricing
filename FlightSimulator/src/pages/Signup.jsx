@@ -17,6 +17,7 @@ export default function Signup({ onLogin }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.detail || data?.message || "Signup failed");
+      
       alert("Signup successful! You can now login.");
       onLogin(data);  // optional: automatically log in after signup
     } catch (err) {

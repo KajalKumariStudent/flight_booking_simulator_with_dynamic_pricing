@@ -100,13 +100,13 @@ export default function SeatSelection({ passenger }) {
     alert("Please select a seat to continue.");
     return;
   }
-
+  const fare = Number.isFinite(finalFare) ? finalFare : flight.base_fare;
   try {
     const payload = {
       flight_id: flight.flight_id,
       passenger_id: passenger.passenger_id,
-      seat_no: selected[0],
-      fare_paid: finalFare,
+      seat_no: String(selected[0]),
+      fare_paid: fare,
     };
 
     const booking = await bookFlight(payload);
@@ -119,6 +119,11 @@ export default function SeatSelection({ passenger }) {
           seat_no: selected[0],
           total: finalFare,
           passenger_id: passenger.passenger_id,
+          // 👇 flatten flight details into booking itself
+          airline_name: flight.airline_name,
+          flight_number: flight.flight_number,
+          source: flight.source_airport,
+          destination: flight.destination_airport,
           flight, // 👈 this ensures flight data is available in Payment.jsx
         },
       },

@@ -23,9 +23,8 @@ export default function Login({ onLogin }) {
       if (!res.ok) throw new Error(data.detail || "Login failed");
 
       // ✅ Save passenger info in localStorage for persistence
-      localStorage.setItem("passenger_id", data.passenger_id);
-      localStorage.setItem("full_name", data.full_name);
-      localStorage.setItem("email", data.email);
+      localStorage.setItem("passenger", JSON.stringify(data));
+      
 
       // ✅ Update state in App (triggers Header update)
       onLogin(data);

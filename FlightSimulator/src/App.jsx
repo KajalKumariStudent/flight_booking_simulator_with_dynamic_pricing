@@ -35,7 +35,7 @@ function App() {
     localStorage.setItem("full_name", data.full_name);
     localStorage.setItem("email", data.email);
   };
-  console.log("Current Passenger:", passenger);
+  //console.log("Current Passenger:", passenger);
   return (
     <>
       <div className="min-h-screen bg-white">

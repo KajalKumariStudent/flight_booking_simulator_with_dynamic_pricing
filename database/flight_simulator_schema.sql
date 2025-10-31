@@ -155,3 +155,5 @@ VALUES
 -- ==============================
 INSERT INTO fare_history (flight_id, price)
 SELECT flight_id, base_fare FROM flights;
+
+UPDATE flights SET available_seats = total_seats;

@@ -1,40 +1,37 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getBookings, cancelBooking } from "../api/api";
 
-export default function MyBookings({passenger}) {
+export default function MyBookings({ passenger }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [cancelledBooking, setCancelledBooking] = useState(null);
+  const navigate = useNavigate();
 
   // ✅ Fetch all bookings
- useEffect(() => {
-  // ⏳ Don’t run until passenger is loaded from App.jsx or localStorage
-  if (passenger === null) return;
+  useEffect(() => {
+    if (passenger === null) return;
 
-  const id = passenger?.passenger_id || localStorage.getItem("passenger_id");
+    const id = passenger?.passenger_id || localStorage.getItem("passenger_id");
 
-  if (!id) {
-    setError("You must be logged in to view bookings.");
-    return;
-  }
+    if (!id) {
+      setError("You must be logged in to view bookings.");
+      return;
+    }
 
-  setLoading(true);
-  setError(null);
+    setLoading(true);
+    setError(null);
 
-  getBookings(id)
-    .then((data) => {
-      setBookings(data);
-    })
-    .catch((e) => {
-      console.error("❌ Failed to fetch bookings:", e);
-      setError(e.message);
-    })
-    .finally(() => setLoading(false));
-}, [passenger]);
-
+    getBookings(id)
+      .then((data) => setBookings(data))
+      .catch((e) => {
+        console.error("❌ Failed to fetch bookings:", e);
+        setError(e.message);
+      })
+      .finally(() => setLoading(false));
+  }, [passenger]);
 
   // ✅ Cancel a booking
   async function handleCancel(pnr) {
@@ -44,13 +41,16 @@ export default function MyBookings({passenger}) {
       setCancelledBooking(booking);
       setShowModal(true);
       setBookings((prev) =>
-        prev.map((b) =>
-          b.pnr === pnr ? { ...b, status: "CANCELLED" } : b
-        )
+        prev.map((b) => (b.pnr === pnr ? { ...b, status: "CANCELLED" } : b))
       );
     } catch (e) {
       alert("Failed to cancel: " + e.message);
     }
+  }
+
+  // ✅ Handle View Booking — only pass booking (no flight fetch)
+  function handleViewBooking(b) {
+    navigate(`/confirmation/${b.pnr}`, { state: { booking: b } });
   }
 
   if (loading)
@@ -74,7 +74,7 @@ export default function MyBookings({passenger}) {
         {bookings.map((b, index) => (
           <div
             key={b.pnr || index}
-            className="bg-white border rounded-lg shadow p-5 flex flex-col sm:flex-row justify-between items-center transition-all hover:shadow-md"
+            className="bg-white border rounded-lg shadow p-5 flex flex-col sm:flex-row justify-between items-center hover:shadow-md"
           >
             {/* Left: Flight Info */}
             <div className="text-left">
@@ -100,13 +100,12 @@ export default function MyBookings({passenger}) {
                 {b.status}
               </div>
               <div className="mt-2 flex gap-2 justify-end">
-                <Link
-                  to={`/confirmation/${b.pnr}`}
-                  state={{ booking: b }}
+                <button
+                  onClick={() => handleViewBooking(b)}
                   className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
                 >
                   View
-                </Link>
+                </button>
                 {b.status !== "CANCELLED" && (
                   <button
                     onClick={() => handleCancel(b.pnr)}

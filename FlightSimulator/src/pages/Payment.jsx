@@ -33,14 +33,16 @@ export default function Payment() {
       // Simulate payment processing delay
       await new Promise((res) => setTimeout(res, 1800));
 
-      const payload = {
-        flight_id: flight.flight_id,
-        passenger_id: booking.passenger_id,
-        seat_no: booking.seat_no,
-        fare_paid: booking.total,
-      };
+      // const payload = {
+      //   flight_id: flight.flight_id,
+      //   passenger_id: booking.passenger_id,
+      //   seat_no: booking.seat_no,
+      //   fare_paid: booking.total,
+      // };
 
-      const response = await bookFlight(payload);
+      // Simulate successful payment without re-booking
+      const response = booking; 
+
 
       const generatedPNR =
         response.pnr ||
@@ -60,6 +62,10 @@ export default function Payment() {
               flight,
               pnr: generatedPNR,
               status: "CONFIRMED",
+              airline_name: booking.airline_name || flight?.airline_name,
+              flight_number: booking.flight_number || flight?.flight_number,
+              source: booking.source || flight?.source_airport,
+              destination: booking.destination || flight?.destination_airport,
             },
             pnr: generatedPNR,
           },

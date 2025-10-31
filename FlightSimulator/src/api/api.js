@@ -61,3 +61,8 @@ export async function cancelBooking(pnr) {
 const res = await fetch(`${BACKEND}/bookings/${pnr}/cancel`, { method: 'POST' })
 return handleRes(res)
 }
+
+export async function getFlightById(flight_id) {
+  const res = await fetch(`${BACKEND}/flights/${flight_id}`);
+  return handleRes(res);
+}

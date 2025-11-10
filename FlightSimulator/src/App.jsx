@@ -11,6 +11,7 @@ import MyBookings from './pages/MyBookings'
 import Header from './components/Header'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
+import PassengerInfo from './pages/PassengerInfo'
 
 function App() {
   const [passenger, setPassenger] = useState(null);
@@ -44,6 +45,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home passenger={passenger}/>} />
           <Route path="/search" element={<SearchResults passenger={passenger}/>} />
+          <Route path="/passenger-info/:flightId" element={<PassengerInfo passenger={passenger} />} />
           <Route path="/seat-selection/:flightId" element={<SeatSelection passenger={passenger}/>} />
           <Route path="/payment/:bookingId" element={<Payment passenger={passenger}/>} />
           <Route path="/confirmation/:pnr" element={<Confirmation passenger={passenger}/>} />

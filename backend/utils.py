@@ -1,12 +1,14 @@
 # utils.py
 import random
 import string
-from sqlalchemy.exc import IntegrityError
+import time
 from passlib.context import CryptContext
+
 
 # -------------------------
 # PNR generation
 # -------------------------
+
 def generate_pnr(length: int = 8) -> str:
     """
     Generate a unique PNR code consisting of uppercase letters and digits.
@@ -14,6 +16,14 @@ def generate_pnr(length: int = 8) -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "".join(random.choices(alphabet, k=length))
 
+def generate_unique_pnr(length: int = 8) -> str:
+    """
+    Generate a unique PNR quickly without querying the database.
+    Combines random characters + timestamp to minimize collision risk.
+    """
+    timestamp_part = int(time.time() * 1000)  # milliseconds since epoch
+    random_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+    return f"{random_part}{timestamp_part}"[:12]  # truncate to max 12 chars
 # -------------------------
 # Password hashing utils
 # -------------------------

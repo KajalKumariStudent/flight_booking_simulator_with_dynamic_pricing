@@ -8,11 +8,12 @@ export default function Home() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [date, setDate] = useState("");
+  const [returnDate, setReturnDate] = useState(""); // new state
   const [trip, setTrip] = useState("oneway");
+  const [passengers, setPassengers] = useState(1); // new state
   const [airports, setAirports] = useState([]);
 
   useEffect(() => {
-    // fetch airport list from backend
     fetch(`${BACKEND}/airports`)
       .then((res) => res.json())
       .then((data) => setAirports(data))
@@ -25,7 +26,9 @@ export default function Home() {
       alert("Please select different origin and destination cities.");
       return;
     }
-    nav("/search", { state: { from, to, date, trip } });
+
+    // Pass all search details to search page
+    nav("/search", { state: { from, to, date, returnDate, trip, passengers } });
   }
 
   return (
@@ -86,6 +89,19 @@ export default function Home() {
               />
             </div>
 
+            {/* Return Date (only for round-trip) */}
+            {trip === "round" && (
+              <div>
+                <label className="block text-sm font-medium text-blue-600">Return</label>
+                <input
+                  type="date"
+                  value={returnDate}
+                  onChange={(e) => setReturnDate(e.target.value)}
+                  className="mt-1 w-full border border-blue-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-600 focus:outline-none transition"
+                />
+              </div>
+            )}
+
             {/* Trip Type */}
             <div>
               <label className="block text-sm font-medium text-blue-600">Trip type</label>
@@ -97,6 +113,19 @@ export default function Home() {
                 <option value="oneway">One-way</option>
                 <option value="round">Round-trip</option>
               </select>
+            </div>
+
+            {/* Passenger Count */}
+            <div>
+              <label className="block text-sm font-medium text-blue-600">Passengers</label>
+              <input
+                type="number"
+                min="1"
+                max="6"
+                value={passengers}
+                onChange={(e) => setPassengers(parseInt(e.target.value) || 1)}
+                className="mt-1 w-full border border-blue-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-600 focus:outline-none transition"
+              />
             </div>
 
             {/* Submit Button */}
@@ -120,6 +149,7 @@ export default function Home() {
             <li>Dynamic pricing simulation based on seat availability and time-to-departure.</li>
             <li>Simulate concurrent bookings and FAKE inventory constraints.</li>
             <li>Learn transactional booking flows and PNR generation.</li>
+            <li>Now supports round-trip and multi-passenger booking!</li>
           </ul>
         </div>
       </aside>

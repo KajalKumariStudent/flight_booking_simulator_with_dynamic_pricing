@@ -1,7 +1,7 @@
 import React from "react";
 import { computeDynamicFare } from "../utils/pricing";
 
-export default function FlightCard({ flight, onBook }) {
+export default function FlightCard({ flight, onPassengerInfo,  isSelected = false}) {
   // Compute the dynamic price (fallback if backend didn't send one)
   const price = flight.dynamic_price
     ? flight.dynamic_price.toFixed(0)
@@ -13,7 +13,15 @@ export default function FlightCard({ flight, onBook }) {
       );
 
   return (
-    <div className="bg-white rounded-2xl shadow-md p-5 flex items-center justify-between border border-blue-600 transition hover:shadow-xl">
+    <div className={`rounded-2xl p-5 flex items-center justify-between transition-all duration-300 cursor-pointer
+        ${
+          isSelected
+            ? "border-2 border-blue-600 bg-blue-50 shadow-lg scale-[1.02]"
+            : "border border-gray-200 bg-white hover:border-blue-400 hover:shadow-md"
+        }`}
+        onClick={onPassengerInfo}
+      >
+      
       {/* Flight Info */}
       <div className="flex items-center gap-4">
         {/* Airline Logo Placeholder */}
@@ -66,10 +74,14 @@ export default function FlightCard({ flight, onBook }) {
         </div>
 
         <button
-          onClick={onBook}
-          className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-xl shadow hover:bg-blue-700 transition transform hover:-translate-y-0.5"
-        >
-          Book Now
+          onClick={onPassengerInfo}
+          className={`px-5 py-2 font-semibold rounded-xl shadow transition ${
+            isSelected
+              ? "bg-green-600 text-white hover:bg-green-700"
+              : "bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5"
+          }`}
+          >
+           {isSelected ? "Selected ✓" : "Book Now"}
         </button>
       </div>
     </div>

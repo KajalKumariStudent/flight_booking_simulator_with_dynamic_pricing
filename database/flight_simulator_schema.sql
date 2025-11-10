@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS flights (
 );
 ALTER TABLE flights
 ADD COLUMN current_price FLOAT DEFAULT 0;
+ALTER TABLE flights
+ADD COLUMN flight_type ENUM('DOMESTIC', 'INTERNATIONAL') DEFAULT 'DOMESTIC',
+ADD COLUMN travel_date DATE;
 
 
 -- Passengers
@@ -71,6 +74,34 @@ CREATE TABLE bookings (
     FOREIGN KEY (flight_id) REFERENCES flights(flight_id),
     FOREIGN KEY (passenger_id) REFERENCES passengers(passenger_id)
 );
+ALTER TABLE bookings ADD COLUMN trip_type ENUM('ONE_WAY', 'ROUND_TRIP') DEFAULT 'ONE_WAY';
+ALTER TABLE bookings ADD COLUMN return_flight_id INT NULL;
+ALTER TABLE bookings
+ADD CONSTRAINT fk_return_flight
+FOREIGN KEY (return_flight_id) REFERENCES flights(flight_id);
+ALTER TABLE bookings ADD COLUMN total_fare DECIMAL(10,2) NULL;
+ALTER TABLE bookings DROP INDEX pnr;
+
+ALTER TABLE bookings 
+ADD INDEX (pnr);
+ALTER TABLE bookings
+ADD COLUMN is_return_leg BOOLEAN DEFAULT FALSE AFTER return_flight_id;
+
+
+
+-- Booking Passengers (for multiple passengers per booking)
+CREATE TABLE IF NOT EXISTS booking_passengers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    booking_id INT,
+    full_name VARCHAR(100) NOT NULL,
+    age INT,
+    gender VARCHAR(10),
+    seat_no VARCHAR(5),
+    FOREIGN KEY (booking_id) REFERENCES bookings(booking_id)
+);
+ALTER TABLE booking_passengers ADD COLUMN return_seat_no VARCHAR(5) NULL;
+ALTER TABLE booking_passengers ADD CONSTRAINT uq_booking_seat UNIQUE (booking_id, seat_no);
+
 
 -- Fare history
 CREATE TABLE IF NOT EXISTS fare_history (
@@ -150,6 +181,33 @@ VALUES
 (2, '6E250', 2, 1, '2025-11-15 07:00:00', '2025-11-15 09:15:00', 5100, 180, 170),
 (3, 'SG350', 3, 2, '2025-11-15 11:30:00', '2025-11-15 13:45:00', 4700, 160, 150);
 
+
+-- ==============================
+--  ROUND-TRIP (Return) FLIGHTS
+-- ==============================
+INSERT INTO flights (airline_id, flight_number, source_airport, destination_airport, departure_time, arrival_time, base_fare, total_seats, available_seats)
+VALUES
+(1, 'AI102', 2, 1, '2025-11-05 18:00:00', '2025-11-05 20:00:00', 5200, 150, 130),
+(2, '6E203', 3, 2, '2025-11-05 19:00:00', '2025-11-05 21:15:00', 4800, 180, 160),
+(3, 'SG304', 4, 3, '2025-11-06 18:15:00', '2025-11-06 20:45:00', 4300, 160, 150),
+(4, 'UK405', 5, 4, '2025-11-06 20:00:00', '2025-11-06 22:30:00', 5500, 170, 155),
+(5, 'G806', 1, 5, '2025-11-07 19:00:00', '2025-11-07 21:15:00', 4100, 150, 120),
+(6, 'I507', 2, 6, '2025-11-07 15:30:00', '2025-11-07 17:30:00', 4700, 180, 170),
+(1, 'AI108', 4, 1, '2025-11-08 19:00:00', '2025-11-08 21:30:00', 6200, 150, 140),
+(2, '6E209', 5, 2, '2025-11-08 18:45:00', '2025-11-08 21:00:00', 4950, 180, 165),
+(3, 'SG310', 6, 3, '2025-11-09 16:00:00', '2025-11-09 18:00:00', 5200, 160, 155),
+(4, 'UK411', 1, 4, '2025-11-09 19:30:00', '2025-11-09 22:00:00', 5600, 170, 160),
+(5, 'G813', 2, 5, '2025-11-10 17:00:00', '2025-11-10 19:30:00', 4200, 150, 140),
+(6, 'I515', 3, 6, '2025-11-10 14:15:00', '2025-11-10 16:30:00', 4600, 180, 172),
+(1, 'AI116', 6, 1, '2025-11-11 19:00:00', '2025-11-11 21:10:00', 5400, 150, 140),
+(2, '6E219', 4, 2, '2025-11-11 17:45:00', '2025-11-11 20:00:00', 4900, 180, 160),
+(3, 'SG321', 5, 3, '2025-11-12 18:30:00', '2025-11-12 21:00:00', 4600, 160, 150),
+(4, 'UK426', 6, 4, '2025-11-12 19:00:00', '2025-11-12 21:15:00', 5300, 170, 155),
+(5, 'G831', 3, 5, '2025-11-13 19:00:00', '2025-11-13 21:15:00', 4400, 150, 130),
+(6, 'I546', 5, 6, '2025-11-14 21:30:00', '2025-11-14 23:30:00', 4800, 180, 178),
+(2, '6E251', 1, 2, '2025-11-15 19:00:00', '2025-11-15 21:15:00', 5100, 180, 170),
+(3, 'SG351', 2, 3, '2025-11-15 18:30:00', '2025-11-15 20:45:00', 4700, 160, 150);
+
 -- ==============================
 --  FARE HISTORY
 -- ==============================
@@ -157,3 +215,5 @@ INSERT INTO fare_history (flight_id, price)
 SELECT flight_id, base_fare FROM flights;
 
 UPDATE flights SET available_seats = total_seats;
+
+SELECT * FROM passengers;

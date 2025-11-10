@@ -39,14 +39,31 @@ return handleRes(res)
 }
 
 
-export async function bookFlight(payload) {
+export async function bookFlight(payload, tripType = "oneway") {
   console.log("✈️ Sending booking payload:", payload);
-  const res = await fetch(`${BACKEND}/bookings`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(payload)
-  })
-  return handleRes(res)
+
+  // Choose endpoint based on trip type
+  const endpoint =
+    tripType === "round"
+      ? `${BACKEND}/bookings/roundtrip`
+      : `${BACKEND}/bookings/oneway`;
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  return handleRes(res);
+}
+
+
+export async function payBooking(pnr) {
+  const res = await fetch(`${BACKEND}/bookings/${pnr}/pay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return handleRes(res);
 }
 
 
@@ -57,10 +74,20 @@ export async function getBookings(passenger_id) {
 }
 
 
-export async function cancelBooking(pnr) {
-const res = await fetch(`${BACKEND}/bookings/${pnr}/cancel`, { method: 'POST' })
-return handleRes(res)
+export async function cancelBooking(pnr, leg = null) {
+  // Build correct URL depending on whether "leg" is passed
+  const url = leg
+    ? `${BACKEND}/bookings/${pnr}/cancel?leg=${leg}`
+    : `${BACKEND}/bookings/${pnr}/cancel`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  return handleRes(res);
 }
+
 
 export async function getFlightById(flight_id) {
   const res = await fetch(`${BACKEND}/flights/${flight_id}`);

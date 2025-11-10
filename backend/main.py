@@ -1,13 +1,12 @@
 import asyncio
 import random
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func
 from database import SessionLocal, engine
 import models, schemas, pricing, utils
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
-from utils import hash_password, verify_password
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
@@ -441,8 +440,15 @@ def list_bookings(
 
     q = (
         db.query(
-            models.Booking,
-            models.Flight,
+            models.Booking.pnr,
+            models.Booking.status,
+            models.Booking.trip_type,
+            models.Booking.return_flight_id,
+            models.Booking.is_return_leg,
+            models.Booking.fare_paid,
+            models.Booking.seat_no,
+            models.Booking.booking_date,
+            models.Flight.flight_number,
             models.Airline.airline_name,
             src.city.label("source_city"),
             dst.city.label("destination_city"),
@@ -453,72 +459,451 @@ def list_bookings(
         .join(dst, models.Flight.destination_airport == dst.airport_id)
     )
 
-    # ✅ Filter by passenger_id if provided
     if passenger_id is not None:
         q = q.filter(models.Booking.passenger_id == passenger_id)
 
     results = q.all()
 
-    return [
+    # Group by PNR and detect overall status
+    grouped = {}
+    for row in results:
+        pnr = row.pnr
+        if pnr not in grouped:
+            grouped[pnr] = {
+                "pnr": pnr,
+                "trip_type": row.trip_type,
+                "status_list": [row.status],
+                "fare_paid": float(row.fare_paid),
+                "seat_no": [row.seat_no],
+                "flight_number": row.flight_number,
+                "airline_name": row.airline_name,
+                "source": row.source_city,
+                "destination": row.destination_city,
+                "return_flight_id": row.return_flight_id,
+                "is_return_leg": row.is_return_leg,
+                "booking_date": row.booking_date,
+            }
+        else:
+            grouped[pnr]["status_list"].append(row.status)
+            grouped[pnr]["fare_paid"] += float(row.fare_paid)
+            grouped[pnr]["seat_no"].append(row.seat_no)
+
+    # Compute overall status
+    bookings = []
+    for g in grouped.values():
+        statuses = g["status_list"]
+        if all(s == "CANCELLED" for s in statuses):
+            overall = "CANCELLED"
+        elif any(s == "PARTIALLY_CANCELLED" for s in statuses):
+            overall = "PARTIALLY_CANCELLED"
+        else:
+            overall = "CONFIRMED"
+
+        g["status"] = overall
+        bookings.append(g)
+
+    return bookings
+
+
+@app.get("/bookings/{pnr}", response_model=dict)
+def get_booking_by_pnr(pnr: str, db: Session = Depends(get_db)):
+    """
+    Return full booking details including all passengers and readable flight info.
+    Works for both one-way and roundtrip bookings.
+    """
+    bookings = db.query(models.Booking).filter(models.Booking.pnr == pnr).all()
+    if not bookings:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Collect all flight IDs and booking statuses
+    flight_ids = [b.flight_id for b in bookings]
+
+    src = aliased(models.Airport)
+    dst = aliased(models.Airport)
+
+    flights = (
+        db.query(
+            models.Flight.flight_id,
+            models.Flight.flight_number,
+            models.Flight.departure_time,
+            models.Flight.arrival_time,
+            models.Airline.airline_name,
+            src.city.label("source_city"),
+            dst.city.label("destination_city"),
+        )
+        .join(models.Airline, models.Flight.airline_id == models.Airline.airline_id)
+        .join(src, models.Flight.source_airport == src.airport_id)
+        .join(dst, models.Flight.destination_airport == dst.airport_id)
+        .filter(models.Flight.flight_id.in_(flight_ids))
+        .all()
+    )
+
+    passenger_records = (
+        db.query(models.BookingPassenger)
+        .filter(models.BookingPassenger.booking_id.in_([b.booking_id for b in bookings]))
+        .all()
+    )
+
+    passengers = [
         {
-            "pnr": b.pnr,
-            "status": b.status,
-            "fare_paid": float(b.fare_paid),
-            "seat_no": b.seat_no,
-            "booking_date": b.booking_date,
-            "flight_number": f.flight_number,
-            "airline_name": airline_name,
-            "source": source_city,
-            "destination": destination_city,
-            "passenger_id": b.passenger_id,
+            "full_name": p.full_name,
+            "age": p.age,
+            "gender": p.gender,
+            "seat_no": p.seat_no,
+            "return_seat_no": p.return_seat_no,
         }
-        for b, f, airline_name, source_city, destination_city in results
+        for p in passenger_records
     ]
 
-@app.get("/bookings/{pnr}", response_model=schemas.BookingOut)
-def get_booking_by_pnr(pnr: str, db: Session = Depends(get_db)):
-    b = db.query(models.Booking).filter(models.Booking.pnr == pnr).first()
-    if not b:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    return b
+    # Combine flight and booking data clearly
+    flight_data = []
+    for b in bookings:
+        f = next((fl for fl in flights if fl.flight_id == b.flight_id), None)
+        if f:
+            flight_data.append({
+                "flight_number": f.flight_number,
+                "airline_name": f.airline_name,
+                "source": f.source_city,
+                "destination": f.destination_city,
+                "departure_time": f.departure_time,
+                "arrival_time": f.arrival_time,
+                "status": b.status,  # ✅ Each leg shows its own status
+                "is_return_leg": b.is_return_leg,
+            })
+
+    total_fare = sum(float(b.fare_paid or 0) for b in bookings)
+    trip_type = bookings[0].trip_type
+
+    # Determine main status
+    overall_status = "CONFIRMED"
+    if all(b.status == "CANCELLED" for b in bookings):
+        overall_status = "CANCELLED"
+    elif any(b.status == "PARTIALLY_CANCELLED" for b in bookings):
+        overall_status = "PARTIALLY_CANCELLED"
+
+    return {
+        "pnr": pnr,
+        "trip_type": trip_type,
+        "overall_status": overall_status,
+        "booking_date": bookings[0].booking_date,
+        "flights": flight_data,
+        "passengers": passengers,
+        "total_fare": total_fare,
+    }
+
 
 @app.post("/bookings/{pnr}/pay")
 def pay_booking(pnr: str, db: Session = Depends(get_db)):
-    b = db.query(models.Booking).filter(models.Booking.pnr == pnr).first()
-    if not b:
+    bookings = db.query(models.Booking).filter(models.Booking.pnr == pnr).all()
+
+    if not bookings:
         raise HTTPException(status_code=404, detail="Booking not found")
 
     success = random.random() < 0.9
-    b.status = "PAID" if success else "PAYMENT_FAILED"
+
+    for b in bookings:
+        b.status = "CONFIRMED" if success else "PAYMENT_FAILED"
+
     db.commit()
-    return {"message": "Payment successful" if success else "Payment failed", "pnr": b.pnr, "status": b.status}
+
+    return {
+        "message": "Payment successful" if success else "Payment failed",
+        "pnr": pnr,
+        "status": "CONFIRMED" if success else "PAYMENT_FAILED",
+        "count": len(bookings),
+    }
+
+from fastapi import Query
+
+from fastapi import Query
 
 @app.post("/bookings/{pnr}/cancel")
-def cancel_booking(pnr: str, db: Session = Depends(get_db)):
+def cancel_booking(
+    pnr: str,
+    leg: str | None = Query(default=None, description="Use 'return' to cancel only the return flight"),
+    db: Session = Depends(get_db)
+):
     try:
-        b = db.query(models.Booking).filter(models.Booking.pnr == pnr).with_for_update().first()
-        if not b:
+        # Fetch all bookings under this PNR
+        bookings = (
+            db.query(models.Booking)
+            .filter(models.Booking.pnr == pnr)
+            .with_for_update()
+            .all()
+        )
+        if not bookings:
             raise HTTPException(status_code=404, detail="Booking not found")
-        if b.status == "CANCELLED":
+
+        cancelled_count = 0
+
+        # ✅ Cancel only return flight(s)
+        if leg == "return":
+            for b in bookings:
+                if b.is_return_leg:  # ✅ this marks the return leg correctly
+                    if b.status != "CANCELLED":
+                        flight = db.query(models.Flight).filter(models.Flight.flight_id == b.flight_id).first()
+                        if flight:
+                            flight.available_seats = min(flight.total_seats, flight.available_seats + 1)
+                        b.status = "CANCELLED"
+                        cancelled_count += 1
+
+            # ✅ Mark onward flight(s) as partially cancelled
+            db.query(models.Booking).filter(
+                models.Booking.pnr == pnr,
+                models.Booking.is_return_leg == False
+            ).update({"status": "PARTIALLY_CANCELLED"})
+
+        # ✅ Cancel entire trip
+        else:
+            for b in bookings:
+                if b.status == "CANCELLED":
+                    continue
+                flight = db.query(models.Flight).filter(models.Flight.flight_id == b.flight_id).first()
+                if flight:
+                    flight.available_seats = min(flight.total_seats, flight.available_seats + 1)
+                b.status = "CANCELLED"
+                cancelled_count += 1
+
+        if cancelled_count == 0:
+            db.rollback()
             return {"message": "Already cancelled", "pnr": pnr}
 
-        flight = db.query(models.Flight).filter(models.Flight.flight_id == b.flight_id).first()
-        if flight:
-            flight.available_seats = min(flight.total_seats, flight.available_seats + 1)
-        b.status = "CANCELLED"
         db.commit()
-        return {"message": "Cancelled", "pnr": pnr}
+
+        return {
+            "message": f"Cancelled {cancelled_count} booking(s)",
+            "pnr": pnr,
+            "cancelled_count": cancelled_count,
+            "partial": leg == "return"
+        }
+
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Cancel failed: {exc}")
 
-# -------------------------
-# Fare History
-# -------------------------
-@app.get("/flights/{flight_id}/fare_history")
-def fare_history(flight_id: int, db: Session = Depends(get_db)):
-    rows = db.query(models.FareHistory).filter(models.FareHistory.flight_id == flight_id).order_by(models.FareHistory.recorded_at.desc()).limit(100).all()
-    return [{"recorded_at": r.recorded_at, "price": float(r.price)} for r in rows]
+    
+@app.post("/bookings/roundtrip", response_model=dict)
+def book_roundtrip(booking_data: schemas.RoundTripBookingCreate, db: Session = Depends(get_db)):
+    try:
+        onward_flight_id = booking_data.onward_flight_id
+        return_flight_id = booking_data.return_flight_id
+        owner_passenger_id = booking_data.owner_passenger_id
+        passengers = booking_data.passengers
+        total_passengers = len(passengers)
+
+        if total_passengers == 0:
+            raise HTTPException(status_code=400, detail="At least one passenger is required.")
+
+        # Fetch flights and owner
+        onward_flight = db.query(models.Flight).filter(models.Flight.flight_id == onward_flight_id).with_for_update().first()
+        return_flight = db.query(models.Flight).filter(models.Flight.flight_id == return_flight_id).with_for_update().first()
+        owner = db.query(models.Passenger).filter(models.Passenger.passenger_id == owner_passenger_id).first()
+
+        if not onward_flight or not return_flight:
+            raise HTTPException(status_code=404, detail="One or both flights not found")
+        if not owner:
+            raise HTTPException(status_code=404, detail="Owner passenger not found")
+        if onward_flight.available_seats < total_passengers or return_flight.available_seats < total_passengers:
+            raise HTTPException(status_code=400, detail="Not enough seats on one or both flights.")
+
+        # Determine if flights are same airline
+        same_airline = onward_flight.airline_id == return_flight.airline_id
+
+        # Generate PNR(s)
+        if same_airline:
+            # ✅ Single PNR for whole itinerary
+            onward_pnr = utils.generate_unique_pnr()
+            return_pnr = onward_pnr
+        else:
+            # ✅ Different PNR per airline
+            onward_pnr = utils.generate_unique_pnr()
+            return_pnr = utils.generate_unique_pnr()
+
+        bookings_created = []
+
+        # Prices
+        onward_price_per = pricing.calculate_dynamic_price(
+            float(onward_flight.base_fare), onward_flight.available_seats, onward_flight.total_seats, onward_flight.departure_time
+        )
+        return_price_per = pricing.calculate_dynamic_price(
+            float(return_flight.base_fare), return_flight.available_seats, return_flight.total_seats, return_flight.departure_time
+        )
+
+        # --- Create bookings for each passenger ---
+        for p in passengers:
+            onward_seat = p.seat_no or str(random.randint(1, onward_flight.total_seats))
+            return_seat = p.return_seat_no or str(random.randint(1, return_flight.total_seats))
+
+            # Onward Booking
+            onward_booking = models.Booking(
+                flight_id=onward_flight_id,
+                passenger_id=owner_passenger_id,
+                seat_no=onward_seat,
+                fare_paid=onward_price_per,
+                total_fare=onward_price_per + return_price_per,
+                booking_date=datetime.now(timezone.utc),
+                status="PENDING_PAYMENT",
+                pnr=onward_pnr,
+                trip_type=models.TripType.ROUND_TRIP,
+                return_flight_id=return_flight_id,
+                is_return_leg=False 
+            )
+            db.add(onward_booking)
+            db.flush()
+
+            db.add(models.BookingPassenger(
+                booking_id=onward_booking.booking_id,
+                full_name=p.full_name,
+                age=p.age,
+                gender=p.gender,
+                seat_no=onward_seat,
+                return_seat_no=return_seat
+            ))
+
+            # Return Booking
+            return_booking = models.Booking(
+                flight_id=return_flight_id,
+                passenger_id=owner_passenger_id,
+                seat_no=return_seat,
+                fare_paid=return_price_per,
+                total_fare=onward_price_per + return_price_per,
+                booking_date=datetime.now(timezone.utc),
+                status="PENDING_PAYMENT",
+                pnr=return_pnr,
+                trip_type=models.TripType.ROUND_TRIP,
+                return_flight_id=onward_flight_id,
+                is_return_leg=True 
+            )
+            db.add(return_booking)
+            db.flush()
+
+            bookings_created.append({
+                "onward_booking_id": onward_booking.booking_id,
+                "return_booking_id": return_booking.booking_id,
+                "passenger_name": p.full_name,
+                "onward_seat_no": onward_seat,
+                "return_seat_no": return_seat,
+                "onward_fare": float(onward_price_per),
+                "return_fare": float(return_price_per),
+                "total_fare": float(onward_price_per + return_price_per),
+                "onward_pnr": onward_pnr,
+                "return_pnr": return_pnr if not same_airline else None
+            })
+
+        # --- Update seat availability ---
+        onward_flight.available_seats -= total_passengers
+        return_flight.available_seats -= total_passengers
+
+        # Record fare history
+        db.add(models.FareHistory(flight_id=onward_flight.flight_id, price=onward_price_per))
+        db.add(models.FareHistory(flight_id=return_flight.flight_id, price=return_price_per))
+
+        db.commit()
+        primary_booking_id = bookings_created[0]["onward_booking_id"] if bookings_created else None
+
+        return {
+            "message": "Roundtrip booking successful",
+            "same_airline": same_airline,
+            "onward_pnr": onward_pnr,
+            "return_pnr": return_pnr if not same_airline else None,
+            "primary_booking_id": primary_booking_id,
+            "bookings": bookings_created
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating roundtrip booking: {e}")
+
+@app.post("/bookings/oneway", response_model=dict, status_code=201)
+def book_oneway(booking_data: schemas.RoundTripBookingCreate, db: Session = Depends(get_db)):
+    """
+    Create a one-way booking for multiple passengers.
+    Generates a single shared PNR for all passengers.
+    """
+    try:
+        flight_id = booking_data.onward_flight_id
+        owner_passenger_id = booking_data.owner_passenger_id
+        passengers = booking_data.passengers
+        total_passengers = len(passengers)
+
+        if total_passengers == 0:
+            raise HTTPException(status_code=400, detail="At least one passenger is required.")
+
+        # Fetch flight and owner
+        flight = db.query(models.Flight).filter(models.Flight.flight_id == flight_id).with_for_update().first()
+        owner = db.query(models.Passenger).filter(models.Passenger.passenger_id == owner_passenger_id).first()
+
+        if not flight:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        if not owner:
+            raise HTTPException(status_code=404, detail="Owner passenger not found")
+        if flight.available_seats < total_passengers:
+            raise HTTPException(status_code=400, detail="Not enough seats available")
+
+        # Generate a single PNR
+        shared_pnr = utils.generate_unique_pnr()
+
+        # Calculate dynamic price
+        price_per_passenger = pricing.calculate_dynamic_price(
+            float(flight.base_fare), flight.available_seats, flight.total_seats, flight.departure_time
+        )
+
+        bookings_created = []
+
+        for p in passengers:
+            seat_no = p.seat_no or str(random.randint(1, flight.total_seats))
+
+            booking = models.Booking(
+                flight_id=flight.flight_id,
+                passenger_id=owner_passenger_id,
+                seat_no=seat_no,
+                fare_paid=price_per_passenger,
+                total_fare=price_per_passenger,  # For one-way, total_fare = fare_paid
+                booking_date=datetime.now(timezone.utc),
+                status="PENDING_PAYMENT",
+                pnr=shared_pnr,
+                trip_type=models.TripType.ONE_WAY
+            )
+            db.add(booking)
+            db.flush()
+
+            # Save passenger details
+            bp = models.BookingPassenger(
+                booking_id=booking.booking_id,
+                full_name=p.full_name,
+                age=p.age,
+                gender=p.gender,
+                seat_no=seat_no
+            )
+            db.add(bp)
+            db.flush()
+
+            bookings_created.append({
+                "passenger_name": p.full_name,
+                "seat_no": seat_no,
+                "fare_paid": float(price_per_passenger),
+                "total_fare": float(price_per_passenger),
+                "pnr": shared_pnr,
+                "booking_id": booking.booking_id
+            })
+
+        # Update flight seat availability
+        flight.available_seats -= total_passengers
+        db.add(models.FareHistory(flight_id=flight.flight_id, price=price_per_passenger))
+        db.commit()
+        
+        return {
+            "message": "One-way booking successful",
+            "flight_id": flight.flight_id,
+            "shared_pnr": shared_pnr,
+            "total_passengers": total_passengers,
+            "primary_booking_id": booking.booking_id,
+            "bookings": bookings_created
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating booking: {e}")
 
 # -------------------------
 # Market Simulation

@@ -1,10 +1,12 @@
 # models.py
 from sqlalchemy import (
-    Column, Integer, String, DateTime, ForeignKey, DECIMAL, Enum, Date, Float, func, TIMESTAMP
+    Column, Integer, String, DateTime, ForeignKey, DECIMAL, Enum, Date, Float, func, TIMESTAMP, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from database import Base
 import enum
+from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy import Boolean
 
 class FlightType(enum.Enum):
     DOMESTIC = "DOMESTIC"
@@ -50,9 +52,12 @@ class Flight(Base):
         "Airport", foreign_keys=[destination_airport], lazy="joined", overlaps="flights"
     )
 
-    bookings = relationship("Booking", back_populates="flight")
+    bookings = relationship(
+        "Booking",
+        back_populates="flight",
+        foreign_keys="Booking.flight_id"
+    )
     fare_history = relationship("FareHistory", back_populates="flight")
-
 
 class Passenger(Base):
     __tablename__ = "passengers"
@@ -63,6 +68,27 @@ class Passenger(Base):
     hashed_password = Column(String(255), nullable=False)
     bookings = relationship("Booking", back_populates="passenger")
 
+class BookingPassenger(Base):
+    __tablename__ = "booking_passengers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    booking_id = Column(Integer, ForeignKey("bookings.booking_id"))
+    full_name = Column(String(100), nullable=False)
+    age = Column(Integer)
+    gender = Column(String(10))
+    seat_no = Column(String(5))
+    return_seat_no = Column(String(5), nullable=True)
+
+    booking = relationship("Booking", back_populates="booking_passengers")
+
+    __table_args__ = (
+        UniqueConstraint('booking_id', 'seat_no', name='uq_booking_seat'),
+    )
+
+class TripType(enum.Enum):
+    ONE_WAY = "ONE_WAY"
+    ROUND_TRIP = "ROUND_TRIP"
+
 class Booking(Base):
     __tablename__ = "bookings"
     booking_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -70,12 +96,30 @@ class Booking(Base):
     passenger_id = Column(Integer, ForeignKey("passengers.passenger_id"))
     seat_no = Column(String(5))
     fare_paid = Column(DECIMAL(10, 2))
+    total_fare = Column(DECIMAL(10, 2), nullable=True)
     booking_date = Column(DateTime, server_default=func.now())
-    status = Column(String(20), default="CONFIRMED")
+    status = Column(String(20), default="PENDING_PAYMENT")  # e.g., PENDING_PAYMENT, CONFIRMED, CANCELLED
     pnr = Column(String(12), unique=True, nullable=True)
 
-    flight = relationship("Flight", back_populates="bookings")
+    # ✅ New columns for round trip
+    trip_type = Column(SQLAlchemyEnum(TripType), default=TripType.ONE_WAY)
+    return_flight_id = Column(Integer, ForeignKey("flights.flight_id"), nullable=True)
+    is_return_leg = Column(Boolean, default=False)
+
+
+    flight = relationship(
+        "Flight",
+        back_populates="bookings",
+        foreign_keys=[flight_id]
+    )
+    return_flight = relationship(
+        "Flight",
+        foreign_keys=[return_flight_id],
+        viewonly=True
+    )
     passenger = relationship("Passenger", back_populates="bookings")
+    booking_passengers = relationship("BookingPassenger", back_populates="booking", cascade="all, delete-orphan")
+
 
 class FareHistory(Base):
     __tablename__ = "fare_history"
@@ -85,3 +129,4 @@ class FareHistory(Base):
     price = Column(DECIMAL(12,2))
 
     flight = relationship("Flight", back_populates="fare_history")
+
